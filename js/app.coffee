@@ -1,5 +1,4 @@
-React = require 'react'
-ReactDOM = require 'react-dom'
+React = require 'preact'
 Redux = require 'redux'
 Kefir = require 'kefir'
 somata = require 'somata-socketio-client'
@@ -23,10 +22,17 @@ Store = Redux.createStore reducer, initial_state
 # Dispatcher
 # ------------------------------------------------------------------------------
 
-user_id = window.location.hash.slice(1)
-if !user_id?.length
+promptForUsername = ->
     user_id = prompt "Set your username"
-    window.location.hash = user_id
+    if user_id?.trim().length
+        window.location.hash = user_id.trim()
+    else
+        promptForUsername()
+
+user_id = window.location.hash.slice(1)
+
+if !user_id?.trim().length
+    promptForUsername()
 
 Dispatcher =
     getBoard: ->
@@ -86,6 +92,9 @@ class App extends React.Component
                             if square.confirmed
                                 square_class += ' confirmed'
                             <div className=square_class key=col onClick={Dispatcher.claimSquare.bind(null, square.id)}>
+                                {if square.pending
+                                    <span className='pending'>{square.pending.length}</span>
+                                }
                                 <span>{square.text}</span>
                             </div>
                         }
@@ -107,4 +116,4 @@ class App extends React.Component
             }
         </div>
 
-ReactDOM.render <App />, document.getElementById 'app'
+React.render <App />, document.getElementById 'app'

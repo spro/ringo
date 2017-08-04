@@ -33,6 +33,8 @@ shuffle = (array) ->
 
 # Keep track of all squares
 
+free_text = "\"Cuck\" (FREE SPACE)"
+
 squares = {}
 [
     "Clark insults date"
@@ -52,7 +54,6 @@ squares = {}
     "Kimia sits on Jay's lap"
     "Seth corrects Baker's grammar"
     "\"Beta\""
-    "\"Cuck\""
     "Amiria insults someone to their face"
     "Baker makes joke, no one laughs"
     "\"Did you know I biked to San Diego?\"- Ben Mayne"
@@ -86,7 +87,7 @@ Object.values = (o) ->
     return vs
 
 # Keep track of confirmed square IDs
-confirmed = {}
+confirmed = {free: true}
 randomSample Object.keys(squares), 3
     .map (id) -> confirmed[id] = true
 
@@ -105,8 +106,11 @@ randomBoard = ->
     shuffled_square_ids = shuffle Object.keys(squares)
     [0...ROWS].map (row) ->
         [0...COLS].map (col) ->
-            {id, text} = squares[shuffled_square_ids[row * ROWS + col]]
-            {id, text}
+            if (row == Math.floor ROWS / 2) and (col == Math.floor COLS / 2)
+                {id: 'free', text: free_text}
+            else
+                {id, text} = squares[shuffled_square_ids[row * ROWS + col]]
+                {id, text}
 
 # Set statuses on someone's board squares based on the confirmed
 # and pending items
@@ -155,6 +159,9 @@ getBoard = (user_id, cb) ->
 
 # Claim square: Send an alert to participants asking for votes if this square is valid
 claimSquare = (square_id, user_id, cb) ->
+    if confirmed[square_id]
+        return cb null
+
     if !pending[square_id]?
         pending[square_id] = [user_id]
     else
@@ -168,6 +175,9 @@ claimSquare = (square_id, user_id, cb) ->
 # Vote square: Participant responds yes or no on whether square is valid
 # If > N yes votes, square is marked confirmed
 voteSquare = (square_id, user_id, vote, cb) ->
+    if confirmed[square_id]
+        return cb null
+
     if pending[square_id]?
         if user_id not in pending[square_id]
             pending[square_id].push user_id
