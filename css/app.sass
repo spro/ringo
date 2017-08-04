@@ -2,6 +2,8 @@ $colors
     primary: #625862
     secondary: #988c8b
     secondary: color(#625862 shade(10%))
+    orange: #d95
+    green: #5d8
 
 *
     margin: 0
@@ -10,18 +12,17 @@ $colors
 
 body
     background: #222
-    font: 10px/16px Roboto
+    font: 10px/14px Roboto, "Helvetica Neue", Arial, sans-serif
 
 #container
     display: flex
     height: 100%
-    justify-content: center
     align-items: center
     flex-direction: column
 
 #header
-    display: flex
     width: 100%
+    display: flex
     padding: 10px
     justify-content: center
     align-items: center
@@ -42,8 +43,8 @@ body
             display: block
             font-weight: bold
             padding: 5px 10px
-            background: #999
-            color: #555
+            background: #444
+            color: #999
 
             &.selected
                 background: #fff
@@ -74,11 +75,11 @@ body
         cursor: pointer
         user-select: none
 
-        &.confirmed
-            background-color: #5d8 !important
-
         &.pending
-            background-color: #d95 !important
+            background-color: $colors.orange !important
+
+        &.confirmed
+            background-color: $colors.green !important
 
         &:active
             opacity: 0.8
@@ -123,3 +124,44 @@ body
             font-weight: bold
             &:active
                 background-color: #ccc
+
+.overlay
+    position: fixed
+    top: 0
+    left: 0
+    right: 0
+    bottom: 0
+    background: rgba(#777, 0.7)
+    display: flex
+    justify-content: center
+    align-items: center
+    flex-direction: column
+    font-size: 14px
+    line-height: 18px
+    padding: 40px
+
+    .winners
+        background: #fff
+        padding: 20px
+        text-align: center
+
+    img
+        margin-bottom: 10px
+
+    .winner
+        font-weight: bold
+
+        & + .winner
+            margin-top: 5px
+
+    p
+        font-style: italic
+        color: #999
+        margin: 10px
+
+    a
+        display: block
+        padding: 10px
+        font-weight: bold
+        cursor: pointer
+        background: $colors.green

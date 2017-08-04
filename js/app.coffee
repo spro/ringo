@@ -13,8 +13,8 @@ initial_state = {
 reducer = (state={}, action) ->
     switch action.type
         when 'setBoard'
-            {board, alerts} = action
-            return Object.assign {}, state, {loading: false, board, alerts}
+            {board, alerts, winners} = action
+            return Object.assign {}, state, {loading: false, board, alerts, winners}
     return state
 
 Store = Redux.createStore reducer, initial_state
@@ -47,15 +47,15 @@ Dispatcher =
             .log 'voted'
 
 Dispatcher.getBoard user_id
-    .onValue ({board, alerts}) ->
-        Store.dispatch {type: 'setBoard', board, alerts}
+    .onValue ({board, alerts, winners}) ->
+        Store.dispatch {type: 'setBoard', board, alerts, winners}
 
 somata.connect ->
     console.log '[connected]'
 
 somata.subscribe$ 'bingo', 'updateBoard:' + user_id
-    .onValue ({board, alerts}) ->
-        Store.dispatch {type: 'setBoard', board, alerts}
+    .onValue ({board, alerts, winners}) ->
+        Store.dispatch {type: 'setBoard', board, alerts, winners}
 
 # Components
 # ------------------------------------------------------------------------------
@@ -89,7 +89,7 @@ class App extends React.Component
             @setState Store.getState()
 
     render: ->
-        {loading, board, alerts} = @state
+        {loading, board, alerts, winners} = @state
 
         <div id='container'>
             <div id='header'>
@@ -109,12 +109,12 @@ class App extends React.Component
                         {[0...5].map (col) ->
                             square = board[row][col]
                             square_class = "square"
-                            if square.pending
+                            if square.pending?.length
                                 square_class += ' pending'
                             if square.confirmed
                                 square_class += ' confirmed'
                             <div className=square_class key=col onDblClick={Dispatcher.claimSquare.bind(null, square.id)} onTouchStart={claimOnDouble.bind(null, square.id)}>
-                                {if square.pending
+                                {if square.pending?.length
                                     <span className='pending'>{square.pending.length}</span>
                                 }
                                 <span>{square.text}</span>
@@ -123,7 +123,26 @@ class App extends React.Component
                     </div>
             }
 
-            {if alerts?.length
+            {if winners?.length
+                console.log "WINNERS", winners
+                <div className='overlay'>
+                    <div className='winners'>
+                        <img src='/images/logo.png' />
+                        {if winners.length == 1
+                            <p>We have a winner!</p>
+                        else
+                            <p>We have {winners.length} winners!</p>
+                        }
+                        {winners.map (user_id) ->
+                            <div className='winner' key=user_id>
+                                {user_id}
+                            </div>
+                        }
+                        <p>The winner{if winners.length > 1 then 's'} may present this ticket for a free drink at the bar.</p>
+                        <a>Reset board</a>
+                    </div>
+                </div>
+            else if alerts?.length
                 <div className='alerts'>
                     {alerts.map (alert) ->
                         <div className='alert' key=alert.square.id>

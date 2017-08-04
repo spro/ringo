@@ -95,7 +95,7 @@ randomSample Object.keys(squares), 3
 # claimed this square as pending. Once N_CONFIRM people have confirmed it,
 # the square will be marked as confirmed
 pending = {}
-pending[Object.keys(squares)[0]] = ['jeff']
+pending[Object.keys(squares)[0]] = {'jeff': 1}
 
 ROWS = 5
 COLS = 5
@@ -121,7 +121,7 @@ fillBoard = (board) ->
             {
                 id, text,
                 confirmed: confirmed[id]
-                pending: pending[id]
+                pending: Object.values(pending[id]).filter (vote) -> vote == 1
             }
 
 # Keep track of boards of every user
@@ -138,11 +138,11 @@ createBoard = (user_id, cb) ->
 
 makeAlerts = (user_id) ->
     alerts = []
-    for square_id, user_ids of pending
-        if user_id not in user_ids
+    for square_id, user_votes of pending
+        if not user_votes[user_id]?
             alerts.push {
                 square: squares[square_id]
-                user_id: user_ids[0]
+                user_id: Object.keys(user_votes)[0]
             }
     return alerts
 
@@ -155,16 +155,19 @@ getBoard = (user_id, cb) ->
     cb null, {
         board: fillBoard user_board
         alerts: makeAlerts user_id
+        winners: checkWinners()
     }
 
 # Claim square: Send an alert to participants asking for votes if this square is valid
 claimSquare = (square_id, user_id, cb) ->
     if !confirmed[square_id]
         if !pending[square_id]?
-            pending[square_id] = [user_id]
+            votes = {}
+            votes[user_id] = 1
+            pending[square_id] = votes
         else
-            if user_id not in pending[square_id]
-                pending[square_id].push user_id
+            if not pending[square_id][user_id]
+                pending[square_id][user_id] = 1
     cb null
     publishBoards()
     checkPending square_id
@@ -174,16 +177,23 @@ claimSquare = (square_id, user_id, cb) ->
 # If > N yes votes, square is marked confirmed
 voteSquare = (square_id, user_id, vote, cb) ->
     if !confirmed[square_id] and pending[square_id]?
-        if user_id not in pending[square_id]
-            pending[square_id].push user_id
+        if not pending[square_id][user_id]?
+            pending[square_id][user_id] = vote
     cb null
     checkPending square_id
     publishBoards()
 
+add = (a, b) -> a + b
+sum = (l) -> l.reduce add, 0
+
 checkPending = (square_id) ->
     # If enough votes, emit confirm event
-    if pending[square_id]?.length >= N_CONFIRM
-        confirmSquare square_id
+    if user_votes = pending[square_id]
+        total = sum Object.values user_votes
+        if total >= N_CONFIRM
+            confirmSquare square_id
+        else if total == -1
+            delete pending[square_id]
 
 # Confirm square: Square is set confirmed, all participants are notified.
 # Checks participant boards to find a winner
@@ -191,6 +201,55 @@ confirmSquare = (square_id) ->
     delete pending[square_id]
     confirmed[square_id] = true
     publishBoards()
+
+checkWinners = ->
+    winners = []
+    for user_id, user_board of user_boards
+        if checkBoard user_board
+            winners.push user_id
+    return winners
+
+winning_positions = []
+
+flatten = (ls) ->
+    flat = []
+    for l in ls
+        for i in l
+            flat.push i
+    return flat
+
+# Rows
+[0...ROWS].map (row) ->
+    winning_positions.push [0...COLS].map (col) ->
+        [row, col]
+
+# Columns
+[0...COLS].map (col) ->
+    winning_positions.push [0...ROWS].map (row) ->
+        [row, col]
+
+# Diagonals
+winning_positions.push [0...ROWS].map (row) ->
+    [row, row]
+
+winning_positions.push [0...ROWS].map (row) ->
+    [row, ROWS - row - a-1]
+
+console.log winning_positions
+
+checkBoard = (user_board) ->
+    for positions in winning_positions
+        if checkPositions user_board, positions
+            return true
+    return false
+
+checkPositions = (user_board, positions) ->
+    for position in positions
+        [y, x] = position
+        console.log 'y', y, 'x', x
+        if not confirmed[user_board[y][x].id]
+            return false
+    return true
 
 # Publishing events
 # ------------------------------------------------------------------------------
@@ -206,6 +265,7 @@ publishBoards = ->
         service.publish 'updateBoard:' + user_id, {
             board: fillBoard user_board
             alerts: makeAlerts user_id
+            winners: checkWinners()
         }
 
 # ------------------------------------------------------------------------------
