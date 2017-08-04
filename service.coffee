@@ -76,7 +76,6 @@ squares = {}
     "Carrie and Lizzie ditch Sean and Clark"
     "Ashley relays a message through Javier"
 ].map (text) ->
-    console.log text
     id = randomString()
     squares[id] = {id, text}
 
@@ -86,16 +85,25 @@ Object.values = (o) ->
         vs.push v
     return vs
 
-# Keep track of confirmed square IDs
-confirmed = {free: true}
-randomSample Object.keys(squares), 3
-    .map (id) -> confirmed[id] = true
-
-# Keep track of pending square IDs, as an array of users who have
-# claimed this square as pending. Once N_CONFIRM people have confirmed it,
-# the square will be marked as confirmed
+confirmed = {}
 pending = {}
-pending[Object.keys(squares)[0]] = {'jeff': 1}
+user_boards = {}
+
+reset = (game_id) ->
+    # Keep track of confirmed square IDs
+    confirmed[game_id] = {free: true}
+
+    # Keep track of pending square IDs, as an array of users who have
+    # claimed this square as pending. Once N_CONFIRM people have confirmed it,
+    # the square will be marked as confirmed
+    pending[game_id] = {}
+
+    # Keep track of boards of every user
+    user_boards[game_id] = {}
+
+game_ids = [randomString()]
+
+reset(game_ids[0])
 
 ROWS = 5
 COLS = 5
@@ -114,31 +122,33 @@ randomBoard = ->
 
 # Set statuses on someone's board squares based on the confirmed
 # and pending items
-fillBoard = (board) ->
+fillBoard = (game_id, board) ->
     board.map (row) ->
         row.map (square) ->
             {id, text} = square
+            pending_votes = Object.values(pending[game_id][id])
             {
                 id, text,
-                confirmed: confirmed[id]
-                pending: Object.values(pending[id]).filter (vote) -> vote == 1
+                confirmed: confirmed[game_id][id]
+                pending: pending_votes.filter (vote) -> vote == 1
             }
-
-# Keep track of boards of every user
-user_boards = {}
 
 # Methods
 # ------------------------------------------------------------------------------
 
-# Create a new board for a user
-createBoard = (user_id, cb) ->
-    new_board = randomBoard()
-    user_boards[user_id] = new_board
-    cb null, fillBoard new_board
+# Get the latest game id
+getGameId = (cb) ->
+    cb null, game_ids.slice(-1)[0]
 
-makeAlerts = (user_id) ->
+# Create a new board for a user
+createBoard = (game_id, user_id, cb) ->
+    new_board = randomBoard()
+    user_boards[game_id][user_id] = new_board
+    cb null, fillBoard game_id, new_board
+
+makeAlerts = (game_id, user_id) ->
     alerts = []
-    for square_id, user_votes of pending
+    for square_id, user_votes of pending[game_id]
         if not user_votes[user_id]?
             alerts.push {
                 square: squares[square_id]
@@ -147,76 +157,74 @@ makeAlerts = (user_id) ->
     return alerts
 
 # Return a board for a user
-getBoard = (user_id, cb) ->
-    user_board = user_boards[user_id]
+getBoard = (game_id, user_id, cb) ->
+    user_board = user_boards[game_id][user_id]
     if !user_board?
         user_board = randomBoard()
-        user_boards[user_id] = user_board
+        user_boards[game_id][user_id] = user_board
     cb null, {
-        board: fillBoard user_board
-        alerts: makeAlerts user_id
-        winners: checkWinners()
+        game_id
+        board: fillBoard game_id, user_board
+        alerts: makeAlerts game_id, user_id
+        winners: checkWinners(game_id)
+        leaderboard: calculateLeaderboard()
     }
 
 # Claim square: Send an alert to participants asking for votes if this square is valid
-claimSquare = (square_id, user_id, cb) ->
-    if !confirmed[square_id]
-        if !pending[square_id]?
+claimSquare = (game_id, square_id, user_id, cb) ->
+    if !confirmed[game_id][square_id]
+        if !pending[game_id][square_id]?
             votes = {}
             votes[user_id] = 1
-            pending[square_id] = votes
+            pending[game_id][square_id] = votes
         else
-            if not pending[square_id][user_id]
-                pending[square_id][user_id] = 1
+            if not pending[game_id][square_id][user_id]
+                pending[game_id][square_id][user_id] = 1
     cb null
-    publishBoards()
-    checkPending square_id
-    publishClaim square_id, user_id
+    publishBoards(game_id)
+    checkPending game_id, square_id
+    publishClaim game_id, square_id, user_id
 
 # Vote square: Participant responds yes or no on whether square is valid
 # If > N yes votes, square is marked confirmed
-voteSquare = (square_id, user_id, vote, cb) ->
-    if !confirmed[square_id] and pending[square_id]?
-        if not pending[square_id][user_id]?
-            pending[square_id][user_id] = vote
+voteSquare = (game_id, square_id, user_id, vote, cb) ->
+    if !confirmed[game_id][square_id] and pending[game_id][square_id]?
+        if not pending[game_id][square_id][user_id]?
+            pending[game_id][square_id][user_id] = vote
     cb null
-    checkPending square_id
-    publishBoards()
+    checkPending game_id, square_id
+    publishBoards(game_id)
 
 add = (a, b) -> a + b
 sum = (l) -> l.reduce add, 0
 
-checkPending = (square_id) ->
+checkPending = (game_id, square_id) ->
     # If enough votes, emit confirm event
-    if user_votes = pending[square_id]
+    if user_votes = pending[game_id][square_id]
         total = sum Object.values user_votes
         if total >= N_CONFIRM
-            confirmSquare square_id
+            confirmSquare game_id, square_id
         else if total == -1
-            delete pending[square_id]
+            delete pending[game_id][square_id]
 
 # Confirm square: Square is set confirmed, all participants are notified.
 # Checks participant boards to find a winner
-confirmSquare = (square_id) ->
-    delete pending[square_id]
-    confirmed[square_id] = true
-    publishBoards()
+confirmSquare = (game_id, square_id) ->
+    delete pending[game_id][square_id]
+    confirmed[game_id][square_id] = true
+    publishBoards(game_id)
 
-checkWinners = ->
+# Winning logic
+# ------------------------------------------------------------------------------
+
+checkWinners = (game_id) ->
     winners = []
-    for user_id, user_board of user_boards
-        if checkBoard user_board
+    for user_id, user_board of user_boards[game_id]
+        if checkBoard game_id, user_board
             winners.push user_id
     return winners
 
 winning_positions = []
-
-flatten = (ls) ->
-    flat = []
-    for l in ls
-        for i in l
-            flat.push i
-    return flat
 
 # Rows
 [0...ROWS].map (row) ->
@@ -233,46 +241,72 @@ winning_positions.push [0...ROWS].map (row) ->
     [row, row]
 
 winning_positions.push [0...ROWS].map (row) ->
-    [row, ROWS - row - a-1]
+    [row, ROWS - row - 1]
 
-console.log winning_positions
-
-checkBoard = (user_board) ->
+checkBoard = (game_id, user_board) ->
     for positions in winning_positions
-        if checkPositions user_board, positions
+        if checkPositions game_id, user_board, positions
             return true
     return false
 
-checkPositions = (user_board, positions) ->
+checkPositions = (game_id, user_board, positions) ->
     for position in positions
         [y, x] = position
-        console.log 'y', y, 'x', x
-        if not confirmed[user_board[y][x].id]
+        if not confirmed[game_id][user_board[y][x].id]
             return false
     return true
+
+# Leaderboard
+# ------------------------------------------------------------------------------
+
+calculateLeaderboard = ->
+    user_scores = {}
+    for game_id in game_ids
+        for user_id, user_board of user_boards[game_id]
+            if checkBoard game_id, user_board
+                user_scores[user_id] ||= 0
+                user_scores[user_id] += 1
+    user_scores = Object.entries user_scores
+    user_scores.sort (a, b) ->
+        b[1] - a[1]
+    return user_scores
+
+# Reset
+# ------------------------------------------------------------------------------
+
+resetBoard = (game_id, user_id, cb) ->
+    newest_game_id = game_ids.slice(-1)[0]
+    if newest_game_id == game_id # No new game yet
+        newest_game_id = randomString()
+        game_ids.push newest_game_id
+        reset newest_game_id
+    cb null, newest_game_id
 
 # Publishing events
 # ------------------------------------------------------------------------------
 
-publishClaim = (square_id, user_id) ->
-    if !confirmed[square_id]
+publishClaim = (game_id, square_id, user_id) ->
+    if !confirmed[game_id][square_id]
         # Publish claim
         square = squares[square_id]
-        service.publish 'claim', {user_id, square}
+        service.publish "claim:#{game_id}", {user_id, square}
 
-publishBoards = ->
-    for user_id, user_board of user_boards
-        service.publish 'updateBoard:' + user_id, {
-            board: fillBoard user_board
-            alerts: makeAlerts user_id
-            winners: checkWinners()
+publishBoards = (game_id) ->
+    for user_id, user_board of user_boards[game_id]
+        service.publish "updateBoard:#{game_id}:#{user_id}", {
+            board: fillBoard game_id, user_board
+            alerts: makeAlerts game_id, user_id
+            winners: checkWinners(game_id)
+            leaderboard: calculateLeaderboard()
         }
 
 # ------------------------------------------------------------------------------
 
 service = new somata.Service 'bingo', {
+    getGameId
     createBoard
     getBoard
     claimSquare
     voteSquare
+    resetBoard
 }

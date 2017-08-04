@@ -8,13 +8,17 @@ somata = require 'somata-socketio-client'
 
 initial_state = {
     loading: true
+    tab: 'board'
 }
 
 reducer = (state={}, action) ->
     switch action.type
         when 'setBoard'
-            {board, alerts, winners} = action
-            return Object.assign {}, state, {loading: false, board, alerts, winners}
+            {board, alerts, winners, leaderboard} = action
+            return Object.assign {}, state, {loading: false, board, alerts, winners, leaderboard}
+        when 'changeTab'
+            {tab} = action
+            return Object.assign {}, state, {tab}
     return state
 
 Store = Redux.createStore reducer, initial_state
@@ -22,49 +26,63 @@ Store = Redux.createStore reducer, initial_state
 # Dispatcher
 # ------------------------------------------------------------------------------
 
+Globals =
+    user_id: window.location.hash.slice(1)
+    game_id: null
+
 promptForUsername = ->
     user_id = prompt "Set your username"
     if user_id?.trim().length
         window.location.hash = user_id.trim()
+        Globals.user_id = user_id
     else
         promptForUsername()
 
-user_id = window.location.hash.slice(1)
-
-if !user_id?.trim().length
+if !Globals.user_id?.trim().length
     promptForUsername()
 
 Dispatcher =
     getBoard: ->
-        somata.remote$ 'bingo', 'getBoard', user_id
+        somata.remote$ 'bingo', 'getBoard', Globals.game_id, Globals.user_id
 
     claimSquare: (square_id) ->
-        somata.remote$ 'bingo', 'claimSquare', square_id, user_id
+        somata.remote$ 'bingo', 'claimSquare', Globals.game_id, square_id, Globals.user_id
             .log 'claimed'
 
     voteSquare: (square_id, vote) ->
-        somata.remote$ 'bingo', 'voteSquare', square_id, user_id, vote
+        somata.remote$ 'bingo', 'voteSquare', Globals.game_id, square_id, Globals.user_id, vote
             .log 'voted'
 
-Dispatcher.getBoard user_id
-    .onValue ({board, alerts, winners}) ->
-        Store.dispatch {type: 'setBoard', board, alerts, winners}
+    resetBoard: ->
+        somata.remote$ 'bingo', 'resetBoard', Globals.game_id, Globals.user_id
+            .onValue (new_game_id) ->
+                refresh new_game_id
+
+    setTab: (tab) ->
+        Store.dispatch {type: 'changeTab', tab}
 
 somata.connect()
 
-somata.subscribe$ 'bingo', 'updateBoard:' + user_id
-    .onValue ({board, alerts, winners}) ->
-        Store.dispatch {type: 'setBoard', board, alerts, winners}
+refresh = (new_game_id) ->
+    if new_game_id?
+        somata.unsubscribe 'bingo', "updateBoard:#{Globals.game_id}:#{Globals.user_id}"
+        Globals.game_id = new_game_id
 
-refresh = ->
-    Dispatcher.getBoard user_id
-        .onValue ({board, alerts, winners}) ->
-            Store.dispatch {type: 'setBoard', board, alerts, winners}
+    somata.subscribe$ 'bingo', "updateBoard:#{Globals.game_id}:#{Globals.user_id}"
+        .onValue ({board, alerts, winners, leaderboard}) ->
+            Store.dispatch {type: 'setBoard', board, alerts, winners, leaderboard}
+
+    Dispatcher.getBoard Globals.game_id, Globals.user_id
+        .onValue ({board, alerts, winners, leaderboard}) ->
+            Store.dispatch {type: 'setBoard', board, alerts, winners, leaderboard}
+
+somata.remote$ 'bingo', 'getGameId'
+    .onValue (game_id) ->
+        Globals.game_id = game_id
+        refresh()
 
 window.addEventListener "focus", ->
     refresh()
-
-refresh()
 
 # Components
 # ------------------------------------------------------------------------------
@@ -83,7 +101,6 @@ claimOnDouble = (square_id, e) ->
         double_touch_count++
     double_touch_square = square_id
     if double_touch_count == 2
-        console.log 'dubbd'
         Dispatcher.claimSquare square_id
         double_touch_count = 0
     else
@@ -98,21 +115,21 @@ class App extends React.Component
             @setState Store.getState()
 
     render: ->
-        {loading, board, alerts, winners} = @state
+        {loading, tab, board, alerts, winners, leaderboard} = @state
 
         <div id='container'>
             <div id='header'>
                 <img src='/images/logo.png' />
                 <div id='navigation'>
-                    <a className='selected'>Board</a>
-                    <a className='unselected'>Leaderboard</a>
+                    <a onClick={Dispatcher.setTab.bind(null, 'board')} className={if tab == 'board' then 'selected'}>Board</a>
+                    <a onClick={Dispatcher.setTab.bind(null, 'leaderboard')} className={if tab == 'leaderboard' then 'selected'}>Leaderboard</a>
                 </div>
-                <span className='username'>{user_id}</span>
+                <span className='username'>{Globals.user_id}</span>
             </div>
 
             {if loading
                 <p>Loading...</p>
-            else
+            else if tab == 'board'
                 [0...5].map (row) ->
                     <div className='row' key=row>
                         {[0...5].map (col) ->
@@ -130,10 +147,21 @@ class App extends React.Component
                             </div>
                         }
                     </div>
+            else if tab == 'leaderboard'
+                <div id='leaderboard'>
+                    {if leaderboard.length
+                        leaderboard.map ([user_id, user_score]) ->
+                            <div className='leader' key=user_id>
+                                <span className='user_id'>{user_id}</span>
+                                <span className='user_score'>{user_score}</span>
+                            </div>
+                    else
+                        <p className='empty'>Nobody has won a game yet...</p>
+                    }
+                </div>
             }
 
             {if winners?.length
-                console.log "WINNERS", winners
                 <div className='overlay'>
                     <div className='winners'>
                         <img src='/images/logo.png' />
@@ -148,14 +176,14 @@ class App extends React.Component
                             </div>
                         }
                         <p>The winner{if winners.length > 1 then 's'} may present this ticket for a free drink at the bar.</p>
-                        <a>Reset board</a>
+                        <a onClick=Dispatcher.resetBoard>Join new game</a>
                     </div>
                 </div>
             else if alerts?.length
                 <div className='alerts'>
                     {alerts.map (alert) ->
                         <div className='alert' key=alert.square.id>
-                            <p className='message'>{alert.user_id} claims <strong>{alert.square.text}</strong></p>
+                            <p className='message'><strong>{alert.user_id}</strong> claims <strong>{alert.square.text}</strong></p>
                             <div className='buttons'>
                                 <a onClick={Dispatcher.voteSquare.bind(null, alert.square.id, 1)}>Confirm</a>
                                 <a onClick={Dispatcher.voteSquare.bind(null, alert.square.id, -1)}>Deny</a>
@@ -164,6 +192,8 @@ class App extends React.Component
                     }
                 </div>
             }
+
+            <span className='game_id'>{Globals.game_id}</span>
         </div>
 
 React.render <App />, document.getElementById 'app'
