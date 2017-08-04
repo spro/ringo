@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "kefir": "^3.7.3",
+    "react": "^15.6.1",
+    "react-dom": "^15.6.1",
+    "redux": "^3.7.2",
+    "somata-socketio": "0.0.12",
+    "somata-socketio-client": "0.0.2"
+  }
+}

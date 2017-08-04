@@ -1,0 +1,112 @@
+$colors
+    primary: #625862
+    secondary: #988c8b
+    secondary: color(#625862 shade(10%))
+
+*
+    margin: 0
+    padding: 0
+    box-sizing: border-box
+
+body
+    background: #222
+    font: 10px/16px Roboto
+
+#container
+    display: flex
+    height: 100%
+    justify-content: center
+    align-items: center
+    flex-direction: column
+
+#header
+    display: flex
+    width: 100%
+    padding: 10px
+    justify-content: center
+    align-items: center
+    font-size: 12px
+
+    img
+        margin-right: 10px
+        position: relative
+        top: -5px
+
+    #navigation
+        flex-grow: 1
+        display: flex
+        align-items: center
+        justify-content: center
+
+        a
+            display: block
+            font-weight: bold
+            padding: 5px 10px
+            background: #999
+            color: #555
+
+            &.selected
+                background: #fff
+                color: #000
+
+    .username
+        color: #fff
+        font-weight: bold
+
+.row
+    display: flex
+    background: $colors.primary
+    color: #fff
+    width: 100%
+
+    .square
+        min-height: 100px
+        padding: 3px
+        flex-grow: 1
+        flex-shrink: 0
+        flex-basis: 0
+        display: flex
+        align-items: center
+        justify-content: center
+        text-align: center
+
+        &.confirmed
+            background-color: #5d8 !important
+
+        &.pending
+            background-color: #d95 !important
+
+.row:nth-child(2n+1)
+    .square:nth-child(2n+1)
+        background: $colors.secondary
+
+.row:nth-child(2n)
+    .square:nth-child(2n)
+        background: $colors.secondary
+
+.alerts
+    position: fixed
+    top: 0
+    left: 0
+    right: 0
+    bottom: 0
+    background: rgba(#000, 0.7)
+
+    .alert
+        background: #eee
+
+    .message
+        padding: 10px
+
+    .buttons
+        display: flex
+
+        a
+            background: #ddd
+            display: block
+            flex-grow: 1
+            padding: 10px
+            text-align: center
+            font-weight: bold
+            &:active
+                background-color: #ccc
