@@ -60,6 +60,28 @@ somata.subscribe$ 'bingo', 'updateBoard:' + user_id
 # Components
 # ------------------------------------------------------------------------------
 
+double_touch_square = null
+double_touch_count = 0
+double_touch_timeout = null
+
+claimOnDouble = (square_id, e) ->
+    e.preventDefault()
+    e.stopPropagation()
+    clearTimeout double_touch_timeout
+    if square_id != double_touch_square
+        double_touch_count = 1
+    else
+        double_touch_count++
+    double_touch_square = square_id
+    if double_touch_count == 2
+        console.log 'dubbd'
+        Dispatcher.claimSquare square_id
+        double_touch_count = 0
+    else
+        double_touch_timeout = setTimeout ->
+            double_touch_count = 0
+        , 500
+
 class App extends React.Component
     constructor: ->
         @state = Store.getState()
@@ -91,7 +113,7 @@ class App extends React.Component
                                 square_class += ' pending'
                             if square.confirmed
                                 square_class += ' confirmed'
-                            <div className=square_class key=col onClick={Dispatcher.claimSquare.bind(null, square.id)}>
+                            <div className=square_class key=col onDblClick={Dispatcher.claimSquare.bind(null, square.id)} onTouchStart={claimOnDouble.bind(null, square.id)}>
                                 {if square.pending
                                     <span className='pending'>{square.pending.length}</span>
                                 }
