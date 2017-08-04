@@ -159,14 +159,12 @@ getBoard = (user_id, cb) ->
 
 # Claim square: Send an alert to participants asking for votes if this square is valid
 claimSquare = (square_id, user_id, cb) ->
-    if confirmed[square_id]
-        return cb null
-
-    if !pending[square_id]?
-        pending[square_id] = [user_id]
-    else
-        if user_id not in pending[square_id]
-            pending[square_id].push user_id
+    if !confirmed[square_id]
+        if !pending[square_id]?
+            pending[square_id] = [user_id]
+        else
+            if user_id not in pending[square_id]
+                pending[square_id].push user_id
     cb null
     publishBoards()
     checkPending square_id
@@ -175,10 +173,7 @@ claimSquare = (square_id, user_id, cb) ->
 # Vote square: Participant responds yes or no on whether square is valid
 # If > N yes votes, square is marked confirmed
 voteSquare = (square_id, user_id, vote, cb) ->
-    if confirmed[square_id]
-        return cb null
-
-    if pending[square_id]?
+    if !confirmed[square_id] and pending[square_id]?
         if user_id not in pending[square_id]
             pending[square_id].push user_id
     cb null
