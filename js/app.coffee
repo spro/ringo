@@ -50,12 +50,21 @@ Dispatcher.getBoard user_id
     .onValue ({board, alerts, winners}) ->
         Store.dispatch {type: 'setBoard', board, alerts, winners}
 
-somata.connect ->
-    console.log '[connected]'
+somata.connect()
 
 somata.subscribe$ 'bingo', 'updateBoard:' + user_id
     .onValue ({board, alerts, winners}) ->
         Store.dispatch {type: 'setBoard', board, alerts, winners}
+
+refresh = ->
+    Dispatcher.getBoard user_id
+        .onValue ({board, alerts, winners}) ->
+            Store.dispatch {type: 'setBoard', board, alerts, winners}
+
+window.addEventListener "focus", ->
+    refresh()
+
+refresh()
 
 # Components
 # ------------------------------------------------------------------------------
